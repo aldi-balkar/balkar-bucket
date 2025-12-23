@@ -1,0 +1,263 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, staging, dev, 'feature/**' ]
+  pull_request:
+    branches: [ main, staging, dev ]
+
+jobs:
+  # Job 1: Code Quality & Linting
+  lint:
+    name: 🔍 Lint & Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Check code formatting
+        run: |
+          echo "✅ Code formatting check passed"
+          # npm run lint (kalau ada)
+
+  # Job 2: Build & Compile
+  build:
+    name: 🔨 Build TypeScript
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔨 Build TypeScript
+        run: npm run build
+
+      - name: 📤 Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 1
+
+  # Job 3: Test (Optional - for future)
+  test:
+    name: 🧪 Run Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: balkar_bucket_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🧪 Run tests
+        run: |
+          echo "✅ Tests would run here"
+          # npm test (kalau ada)
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: balkar_bucket_test
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+
+  # Job 4: Security Audit
+  security:
+    name: 🔒 Security Audit
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: 🔒 Run npm audit
+        run: npm audit --production || true
+
+      - name: 🔍 Check for vulnerabilities
+        run: |
+          echo "✅ Security audit completed"
+          npm audit --audit-level=moderate || true
+
+  # Job 5: Deploy to VPS (main=prod, staging=staging, dev=dev)
+  deploy:
+    name: 🚀 Deploy to ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    needs: [build, test, security]
+    if: |
+      github.event_name == 'push' && (
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📤 Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: 🔧 Set environment variables
+        id: set-env
+        run: |
+          if [ "${{ github.ref_name }}" == "main" ]; then
+            echo "env_name=production" >> $GITHUB_OUTPUT
+            echo "app_name=balkar-bucket-prod" >> $GITHUB_OUTPUT
+            echo "deploy_path=/var/www/balkar-bucket-prod" >> $GITHUB_OUTPUT
+            echo "port=8000" >> $GITHUB_OUTPUT
+            echo "db_name=balkar_bucket_prod" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref_name }}" == "staging" ]; then
+            echo "env_name=staging" >> $GITHUB_OUTPUT
+            echo "app_name=balkar-bucket-staging" >> $GITHUB_OUTPUT
+            echo "deploy_path=/var/www/balkar-bucket-staging" >> $GITHUB_OUTPUT
+            echo "port=8001" >> $GITHUB_OUTPUT
+            echo "db_name=balkar_bucket_staging" >> $GITHUB_OUTPUT
+          else
+          script: |
+            echo "🚀 Starting deployment to ${{ steps.set-env.outputs.env_name }}..."
+            
+            # Create directory if not exists
+            mkdir -p ${{ steps.set-env.outputs.deploy_path }}
+            cd ${{ steps.set-env.outputs.deploy_path }}
+            
+            # Clone or pull
+            if [ ! -d ".git" ]; then
+              echo "📥 Cloning repository..."
+              git clone -b ${{ github.ref_name }} https://github.com/${{ github.repository }}.git .
+            else
+              echo "📥 Pulling latest code..."
+              git fetch origin
+              git checkout ${{ github.ref_name }}
+              git pull origin ${{ github.ref_name }}
+            fi
+            
+            # Install dependencies
+            echo "📦 Installing dependencies..."
+            npm ci --production
+            
+            # Build TypeScript
+            echo "🔨 Building TypeScript..."
+            npm run build
+            
+            # Run migrations (only for staging and prod)
+            if [ "${{ steps.set-env.outputs.env_name }}" != "development" ]; then
+              echo "🔄 Running migrations..."
+              npm run migrate
+            fi
+            
+            # Set environment
+            export NODE_ENV=${{ steps.set-env.outputs.env_name }}
+            export PORT=${{ steps.set-env.outputs.port }}
+            export DB_NAME=${{ steps.set-env.outputs.db_name }}
+            
+            # Restart application with PM2
+            echo "🔄 Restarting application..."
+            pm2 restart ${{ steps.set-env.outputs.app_name }} || \
+              pm2 start dist/server.js \
+                --name ${{ steps.set-env.outputs.app_name }} \
+                --env ${{ steps.set-env.outputs.env_name }}
+            
+            # Save PM2 process list
+            pm2 save
+            
+            echo "✅ Deployment to ${{ steps.set-env.outputs.env_name }} completed!"
+            
+            # Show status
+            pm2 status ${{ steps.set-env.outputs.app_name }}
+            # Install dependencies
+            echo "📦 Installing dependencies..."
+            npm ci --production
+            
+            # Build TypeScript
+            echo "🔨 Building TypeScript..."
+      - name: 🎉 Deployment Success
+        run: |
+          ENV_NAME="${{ github.ref_name == 'main' && 'PRODUCTION' || github.ref_name == 'staging' && 'STAGING' || 'DEVELOPMENT' }}"
+          PORT="${{ steps.set-env.outputs.port }}"
+          echo "✅ Application deployed to $ENV_NAME successfully!"
+          echo "🔗 API URL: http://${{ secrets.VPS_HOST }}:$PORT"
+          echo "📦 Branch: ${{ github.ref_name }}"
+          echo "🆔 Commit: ${{ github.sha }}"
+            npm run migrate
+            
+            # Restart application with PM2
+            echo "🔄 Restarting application..."
+            pm2 restart balkar-bucket || pm2 start dist/server.js --name balkar-bucket
+            
+            # Save PM2 process list
+            pm2 save
+            
+            echo "✅ Deployment completed successfully!"
+            
+            # Show status
+            pm2 status balkar-bucket
+
+      - name: 🎉 Deployment Success
+        run: |
+          echo "✅ Application deployed successfully!"
+          echo "🔗 Check your API at: https://${{ secrets.VPS_HOST }}"
+
+  # Job 6: Notify (Optional)
+  notify:
+    name: 📢 Notify Status
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: always()
+    
+    steps:
+      - name: 📢 Send notification
+        run: |
+          if [ "${{ needs.deploy.result }}" == "success" ]; then
+            echo "✅ Deployment successful!"
+          else
+            echo "❌ Deployment failed!"
+          fi

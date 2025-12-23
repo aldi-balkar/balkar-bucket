@@ -1,0 +1,153 @@
+name: Manual Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      run_migrations:
+        description: 'Run database migrations?'
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  manual-deploy:
+    name: 🚀 Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    
+    environment:
+      name: ${{ inputs.environment }}
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set environment configuration
+        id: config
+        run: |
+          case "${{ inputs.environment }}" in
+            production)
+              echo "branch=main" >> $GITHUB_OUTPUT
+              echo "app_name=balkar-bucket-prod" >> $GITHUB_OUTPUT
+              echo "deploy_path=/var/www/balkar-bucket-prod" >> $GITHUB_OUTPUT
+              echo "port=8000" >> $GITHUB_OUTPUT
+              echo "db_name=balkar_bucket_prod" >> $GITHUB_OUTPUT
+              ;;
+            staging)
+              echo "branch=staging" >> $GITHUB_OUTPUT
+              echo "app_name=balkar-bucket-staging" >> $GITHUB_OUTPUT
+              echo "deploy_path=/var/www/balkar-bucket-staging" >> $GITHUB_OUTPUT
+              echo "port=8001" >> $GITHUB_OUTPUT
+              echo "db_name=balkar_bucket_staging" >> $GITHUB_OUTPUT
+              ;;
+            development)
+              echo "branch=dev" >> $GITHUB_OUTPUT
+              echo "app_name=balkar-bucket-dev" >> $GITHUB_OUTPUT
+              echo "deploy_path=/var/www/balkar-bucket-dev" >> $GITHUB_OUTPUT
+              echo "port=8002" >> $GITHUB_OUTPUT
+              echo "db_name=balkar_bucket_dev" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: 🚀 Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            echo "🚀 Starting manual deployment to ${{ inputs.environment }}..."
+            
+            # Set variables
+            DEPLOY_PATH="${{ steps.config.outputs.deploy_path }}"
+            APP_NAME="${{ steps.config.outputs.app_name }}"
+            BRANCH="${{ steps.config.outputs.branch }}"
+            PORT="${{ steps.config.outputs.port }}"
+            DB_NAME="${{ steps.config.outputs.db_name }}"
+            
+            # Create backup
+            echo "💾 Creating backup..."
+            BACKUP_DIR="/var/backups/balkar-bucket"
+            mkdir -p $BACKUP_DIR
+            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+            
+            if [ -d "$DEPLOY_PATH" ]; then
+              tar -czf "$BACKUP_DIR/${APP_NAME}_${TIMESTAMP}.tar.gz" -C "$DEPLOY_PATH" . 2>/dev/null || true
+              
+              # Keep only last 5 backups
+              cd $BACKUP_DIR
+              ls -t ${APP_NAME}_*.tar.gz | tail -n +6 | xargs rm -f 2>/dev/null || true
+            fi
+            
+            # Create directory if not exists
+            mkdir -p $DEPLOY_PATH
+            cd $DEPLOY_PATH
+            
+            # Clone or pull
+            if [ ! -d ".git" ]; then
+              echo "📥 Cloning repository..."
+              git clone -b $BRANCH https://github.com/${{ github.repository }}.git .
+            else
+              echo "📥 Pulling latest code..."
+              git fetch origin
+              git checkout $BRANCH
+              git pull origin $BRANCH
+            fi
+            
+            # Install dependencies
+            echo "📦 Installing dependencies..."
+            npm ci --production
+            
+            # Build TypeScript
+            echo "🔨 Building TypeScript..."
+            npm run build
+            
+            # Run migrations (if enabled and not dev)
+            if [ "${{ inputs.run_migrations }}" == "true" ]; then
+              if [ "${{ inputs.environment }}" != "development" ]; then
+                echo "🔄 Running migrations..."
+                npm run migrate
+              else
+                echo "⏭️  Skipping migrations for development environment"
+              fi
+            fi
+            
+            # Set environment
+            export NODE_ENV=${{ inputs.environment }}
+            export PORT=$PORT
+            export DB_NAME=$DB_NAME
+            
+            # Restart PM2
+            echo "🔄 Restarting application..."
+            pm2 restart $APP_NAME || \
+              pm2 start dist/server.js \
+                --name $APP_NAME \
+                --env ${{ inputs.environment }}
+            
+            pm2 save
+            
+            echo "✅ Deployment to ${{ inputs.environment }} completed!"
+            pm2 status $APP_NAME
+
+      - name: 📊 Deployment Summary
+        run: |
+          echo "## 📊 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- 🎯 **Environment**: ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🌿 **Branch**: ${{ steps.config.outputs.branch }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 **App Name**: ${{ steps.config.outputs.app_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🚪 **Port**: ${{ steps.config.outputs.port }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 💾 **Database**: ${{ steps.config.outputs.db_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔄 **Migrations**: ${{ inputs.run_migrations }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔗 **API URL**: http://${{ secrets.VPS_HOST }}:${{ steps.config.outputs.port }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Status**: Deployment completed successfully!" >> $GITHUB_STEP_SUMMARY

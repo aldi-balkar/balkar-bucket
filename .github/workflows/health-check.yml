@@ -1,0 +1,42 @@
+name: Health Check
+
+on:
+  schedule:
+    # Run every 30 minutes
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    name: 🏥 Server Health Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 🏥 Check API Health
+        run: |
+          echo "Checking API health..."
+          
+          # Health check endpoint
+          response=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.VPS_HOST }}:8000/api/health || echo "000")
+          
+          if [ "$response" == "200" ]; then
+            echo "✅ API is healthy (HTTP $response)"
+            echo "status=healthy" >> $GITHUB_OUTPUT
+          else
+            echo "❌ API is down or unhealthy (HTTP $response)"
+            echo "status=unhealthy" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+        id: health
+
+      - name: 📊 Get API Stats
+        if: always()
+        run: |
+          curl -s http://${{ secrets.VPS_HOST }}:8000/api/health || echo "Failed to get stats"
+
+      - name: 🔔 Notify on Failure
+        if: failure()
+        run: |
+          echo "⚠️ Health check failed! API is not responding."
+          echo "Please check the server immediately."
+          # Add notification integration here (Slack, Discord, Email, etc)
