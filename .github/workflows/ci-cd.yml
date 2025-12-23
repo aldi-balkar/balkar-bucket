@@ -255,7 +255,7 @@ jobs:
             # Run migrations
             if [ "$ENV_NAME" != "development" ]; then
               echo "🔄 Running migrations..."
-              npm run migrate
+              NODE_ENV=$ENV_NAME npm run migrate
             fi
             
             # Restart application with PM2
