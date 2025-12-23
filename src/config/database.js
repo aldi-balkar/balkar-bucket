@@ -1,6 +1,6 @@
 require('dotenv').config();
 
-module.exports = {
+const config = {
   development: {
     username: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || '',
@@ -35,3 +35,4 @@ module.exports = {
     },
   },
 };
+module.exports = config;
