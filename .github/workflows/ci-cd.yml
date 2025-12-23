@@ -244,8 +244,13 @@ jobs:
             
             # Create database if not exists
             echo "🗄️  Checking database..."
-            sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" | grep -q 1 || \
-              sudo -u postgres psql -c "CREATE DATABASE $DB_NAME; GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO balkar_admin;"
+            if ! sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw $DB_NAME; then
+              echo "Creating database $DB_NAME..."
+              sudo -u postgres createdb $DB_NAME
+              sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO balkar_admin;"
+            else
+              echo "Database $DB_NAME already exists"
+            fi
             
             # Run migrations
             if [ "$ENV_NAME" != "development" ]; then
