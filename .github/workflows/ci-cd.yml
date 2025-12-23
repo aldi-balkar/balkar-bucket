@@ -210,14 +210,14 @@ jobs:
             
             # Create .env file
             echo "⚙️  Creating .env file..."
-            cat > .env << 'ENVEOF'
-NODE_ENV=$ENV_NAME
-PORT=$PORT
-API_BASE_URL=http://202.155.95.166:$PORT
+            cat > .env <<ENVEOF
+NODE_ENV=\$ENV_NAME
+PORT=\$PORT
+API_BASE_URL=http://202.155.95.166:\$PORT
 
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=$DB_NAME
+DB_NAME=\$DB_NAME
 DB_USER=balkar_admin
 DB_PASSWORD=${{ secrets.DB_PASSWORD }}
 DB_DIALECT=postgres
@@ -234,9 +234,9 @@ LOG_LEVEL=info
 ENVEOF
             
             # Replace variables in .env file
-            sed -i "s/\$ENV_NAME/$ENV_NAME/g" .env
-            sed -i "s/\$PORT/$PORT/g" .env
-            sed -i "s/\$DB_NAME/$DB_NAME/g" .env
+            sed -i "s/\\\$ENV_NAME/$ENV_NAME/g" .env
+            sed -i "s/\\\$PORT/$PORT/g" .env
+            sed -i "s/\\\$DB_NAME/$DB_NAME/g" .env
             
             # Create directories
             mkdir -p uploads logs
