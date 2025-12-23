@@ -233,7 +233,6 @@ JWT_SECRET=JWT_SECRET_PLACEHOLDER
 LOG_LEVEL=info
 EOF
             
-            # Replace placeholders in .env file
             sed -i "s/ENV_NAME_PLACEHOLDER/$ENV_NAME/g" .env
             sed -i "s/PORT_PLACEHOLDER/$PORT/g" .env
             sed -i "s/DB_NAME_PLACEHOLDER/$DB_NAME/g" .env
