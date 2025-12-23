@@ -1,0 +1,367 @@
+{
+  "info": {
+    "name": "Balkar Bucket API",
+    "description": "Complete API collection for Balkar Bucket Backend",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/api",
+      "type": "string"
+    },
+    {
+      "key": "api_key",
+      "value": "sk_live_dev_12345678901234567890123456789012",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": ["{{base_url}}"],
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "Buckets",
+      "item": [
+        {
+          "name": "List Buckets",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/buckets?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["buckets"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Bucket",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"my-test-bucket\",\n  \"region\": \"us-east-1\",\n  \"isPublic\": false,\n  \"quota\": 10737418240\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/buckets",
+              "host": ["{{base_url}}"],
+              "path": ["buckets"]
+            }
+          }
+        },
+        {
+          "name": "Get Bucket",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/buckets/:id",
+              "host": ["{{base_url}}"],
+              "path": ["buckets", ":id"],
+              "variable": [{"key": "id", "value": ""}]
+            }
+          }
+        },
+        {
+          "name": "Update Bucket",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isPublic\": true,\n  \"quota\": 21474836480\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/buckets/:id",
+              "host": ["{{base_url}}"],
+              "path": ["buckets", ":id"],
+              "variable": [{"key": "id", "value": ""}]
+            }
+          }
+        },
+        {
+          "name": "Delete Bucket",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/buckets/:id",
+              "host": ["{{base_url}}"],
+              "path": ["buckets", ":id"],
+              "variable": [{"key": "id", "value": ""}]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Files",
+      "item": [
+        {
+          "name": "List Files",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/files?bucketId=&page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["files"],
+              "query": [
+                {"key": "bucketId", "value": ""},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload Files",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {"key": "files", "type": "file", "src": ""},
+                {"key": "bucketId", "value": "", "type": "text"}
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/files/upload",
+              "host": ["{{base_url}}"],
+              "path": ["files", "upload"]
+            }
+          }
+        },
+        {
+          "name": "Get File",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/files/:id",
+              "host": ["{{base_url}}"],
+              "path": ["files", ":id"],
+              "variable": [{"key": "id", "value": ""}]
+            }
+          }
+        },
+        {
+          "name": "Download File",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/files/:id/download",
+              "host": ["{{base_url}}"],
+              "path": ["files", ":id", "download"],
+              "variable": [{"key": "id", "value": ""}]
+            }
+          }
+        },
+        {
+          "name": "Delete File",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/files/:id",
+              "host": ["{{base_url}}"],
+              "path": ["files", ":id"],
+              "variable": [{"key": "id", "value": ""}]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "API Keys",
+      "item": [
+        {
+          "name": "List API Keys",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api-keys?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api-keys"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create API Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My New API Key\",\n  \"permissions\": [\"buckets.read\", \"files.*\"],\n  \"rateLimitEnabled\": true,\n  \"rateLimitMax\": 500\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api-keys",
+              "host": ["{{base_url}}"],
+              "path": ["api-keys"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Statistics",
+      "item": [
+        {
+          "name": "Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/stats/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["stats", "dashboard"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Logs",
+      "item": [
+        {
+          "name": "Activity Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/logs/activity?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["logs", "activity"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
