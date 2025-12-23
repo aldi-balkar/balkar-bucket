@@ -196,7 +196,7 @@ jobs:
             # Clone or pull
             if [ ! -d ".git" ]; then
               echo "📥 Cloning repository..."
-              git clone -b $BRANCH https://${{ secrets.GH_TOKEN }}@github.com/${{ github.repository }}.git .
+              git clone -b $BRANCH https://github.com/${{ github.repository }}.git .
             else
               echo "📥 Pulling latest code..."
               git fetch origin
