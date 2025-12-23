@@ -206,11 +206,7 @@ jobs:
             
             # Install dependencies
             echo "📦 Installing dependencies..."
-            if [ "$ENV_NAME" == "production" ]; then
-              npm ci --production
-            else
-              npm ci
-            fi
+            npm ci
             
             # Create .env if not exists
             if [ ! -f .env ]; then
