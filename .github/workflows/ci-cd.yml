@@ -210,16 +210,16 @@ jobs:
             
             # Create .env file
             echo "⚙️  Creating .env file..."
-            cat > .env <<ENVEOF
-NODE_ENV=\$ENV_NAME
-PORT=\$PORT
-API_BASE_URL=http://202.155.95.166:\$PORT
+            cat > .env << 'EOF'
+NODE_ENV=ENV_NAME_PLACEHOLDER
+PORT=PORT_PLACEHOLDER
+API_BASE_URL=http://202.155.95.166:PORT_PLACEHOLDER
 
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=\$DB_NAME
+DB_NAME=DB_NAME_PLACEHOLDER
 DB_USER=balkar_admin
-DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+DB_PASSWORD=DB_PASSWORD_PLACEHOLDER
 DB_DIALECT=postgres
 
 UPLOAD_DIR=./uploads
@@ -227,16 +227,19 @@ MAX_FILE_SIZE=104857600
 
 FRONTEND_URL=http://localhost:3000
 
-API_KEY_SECRET=${{ secrets.API_KEY_SECRET }}
-JWT_SECRET=${{ secrets.JWT_SECRET }}
+API_KEY_SECRET=API_KEY_SECRET_PLACEHOLDER
+JWT_SECRET=JWT_SECRET_PLACEHOLDER
 
 LOG_LEVEL=info
-ENVEOF
+EOF
             
-            # Replace variables in .env file
-            sed -i "s/\\\$ENV_NAME/$ENV_NAME/g" .env
-            sed -i "s/\\\$PORT/$PORT/g" .env
-            sed -i "s/\\\$DB_NAME/$DB_NAME/g" .env
+            # Replace placeholders in .env file
+            sed -i "s/ENV_NAME_PLACEHOLDER/$ENV_NAME/g" .env
+            sed -i "s/PORT_PLACEHOLDER/$PORT/g" .env
+            sed -i "s/DB_NAME_PLACEHOLDER/$DB_NAME/g" .env
+            sed -i "s/DB_PASSWORD_PLACEHOLDER/${{ secrets.DB_PASSWORD }}/g" .env
+            sed -i "s/API_KEY_SECRET_PLACEHOLDER/${{ secrets.API_KEY_SECRET }}/g" .env
+            sed -i "s/JWT_SECRET_PLACEHOLDER/${{ secrets.JWT_SECRET }}/g" .env
             
             # Create directories
             mkdir -p uploads logs
