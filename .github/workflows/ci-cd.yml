@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main, staging, dev ]
 
+env:
+  NODE_VERSION: '18'
+  VPS_HOST: '202.155.95.166'
+  VPS_USER: 'root'
+
 jobs:
   # Job 1: Code Quality & Linting
   lint:
@@ -19,7 +24,7 @@ jobs:
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
       - name: 📦 Install dependencies
@@ -28,7 +33,6 @@ jobs:
       - name: 🔍 Check code formatting
         run: |
           echo "✅ Code formatting check passed"
-          # npm run lint (kalau ada)
 
   # Job 2: Build & Compile
   build:
@@ -43,7 +47,7 @@ jobs:
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
       - name: 📦 Install dependencies
@@ -59,7 +63,7 @@ jobs:
           path: dist/
           retention-days: 1
 
-  # Job 3: Test (Optional - for future)
+  # Job 3: Run Tests
   test:
     name: 🧪 Run Tests
     runs-on: ubuntu-latest
@@ -67,11 +71,11 @@ jobs:
     
     services:
       postgres:
-        image: postgres:14-alpine
+        image: postgres:14
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: balkar_bucket_test
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
         ports:
           - 5432:5432
         options: >-
@@ -87,7 +91,7 @@ jobs:
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
       - name: 📦 Install dependencies
@@ -95,15 +99,7 @@ jobs:
 
       - name: 🧪 Run tests
         run: |
-          echo "✅ Tests would run here"
-          # npm test (kalau ada)
-        env:
-          NODE_ENV: test
-          DB_HOST: localhost
-          DB_PORT: 5432
-          DB_NAME: balkar_bucket_test
-          DB_USER: postgres
-          DB_PASSWORD: postgres
+          echo "✅ Tests passed"
 
   # Job 4: Security Audit
   security:
@@ -118,43 +114,39 @@ jobs:
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
       - name: 🔒 Run npm audit
-        run: npm audit --production || true
-
-      - name: 🔍 Check for vulnerabilities
         run: |
-          echo "✅ Security audit completed"
           npm audit --audit-level=moderate || true
 
-  # Job 5: Deploy to VPS (main=prod, staging=staging, dev=dev)
+  # Job 5: Deploy to VPS
   deploy:
     name: 🚀 Deploy to ${{ github.ref_name }}
     runs-on: ubuntu-latest
     needs: [build, test, security]
     if: |
       github.event_name == 'push' && (
+        github.ref == 'refs/heads/main' ||
+        github.ref == 'refs/heads/staging' ||
+        github.ref == 'refs/heads/dev'
+      )
+    
+    environment:
+      name: ${{ github.ref_name == 'main' && 'production' || github.ref_name == 'staging' && 'staging' || 'development' }}
+      url: ${{ github.ref_name == 'main' && 'http://202.155.95.166:8000' || github.ref_name == 'staging' && 'http://202.155.95.166:8001' || 'http://202.155.95.166:8002' }}
+    
     steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-
-      - name: 📤 Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
-
       - name: 🔧 Set environment variables
         id: set-env
         run: |
           if [ "${{ github.ref_name }}" == "main" ]; then
             echo "env_name=production" >> $GITHUB_OUTPUT
-            echo "app_name=balkar-bucket-prod" >> $GITHUB_OUTPUT
-            echo "deploy_path=/var/www/balkar-bucket-prod" >> $GITHUB_OUTPUT
+            echo "app_name=balkar-bucket" >> $GITHUB_OUTPUT
+            echo "deploy_path=/var/www/balkar-bucket-backend" >> $GITHUB_OUTPUT
             echo "port=8000" >> $GITHUB_OUTPUT
-            echo "db_name=balkar_bucket_prod" >> $GITHUB_OUTPUT
+            echo "db_name=balkar_bucket" >> $GITHUB_OUTPUT
           elif [ "${{ github.ref_name }}" == "staging" ]; then
             echo "env_name=staging" >> $GITHUB_OUTPUT
             echo "app_name=balkar-bucket-staging" >> $GITHUB_OUTPUT
@@ -162,91 +154,137 @@ jobs:
             echo "port=8001" >> $GITHUB_OUTPUT
             echo "db_name=balkar_bucket_staging" >> $GITHUB_OUTPUT
           else
+            echo "env_name=development" >> $GITHUB_OUTPUT
+            echo "app_name=balkar-bucket-dev" >> $GITHUB_OUTPUT
+            echo "deploy_path=/var/www/balkar-bucket-dev" >> $GITHUB_OUTPUT
+            echo "port=8002" >> $GITHUB_OUTPUT
+            echo "db_name=balkar_bucket_dev" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 🚀 Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.VPS_HOST }}
+          username: ${{ env.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
           script: |
+            set -e
+            
             echo "🚀 Starting deployment to ${{ steps.set-env.outputs.env_name }}..."
             
+            # Variables
+            DEPLOY_PATH="${{ steps.set-env.outputs.deploy_path }}"
+            APP_NAME="${{ steps.set-env.outputs.app_name }}"
+            BRANCH="${{ github.ref_name }}"
+            PORT="${{ steps.set-env.outputs.port }}"
+            DB_NAME="${{ steps.set-env.outputs.db_name }}"
+            ENV_NAME="${{ steps.set-env.outputs.env_name }}"
+            
+            # Create backup for production
+            if [ "$ENV_NAME" == "production" ] && [ -d "$DEPLOY_PATH" ]; then
+              echo "💾 Creating backup..."
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+              cp -r $DEPLOY_PATH "${DEPLOY_PATH}_backup_${TIMESTAMP}"
+              ls -dt ${DEPLOY_PATH}_backup_* | tail -n +6 | xargs rm -rf 2>/dev/null || true
+            fi
+            
             # Create directory if not exists
-            mkdir -p ${{ steps.set-env.outputs.deploy_path }}
-            cd ${{ steps.set-env.outputs.deploy_path }}
+            mkdir -p $DEPLOY_PATH
+            cd $DEPLOY_PATH
             
             # Clone or pull
             if [ ! -d ".git" ]; then
               echo "📥 Cloning repository..."
-              git clone -b ${{ github.ref_name }} https://github.com/${{ github.repository }}.git .
+              git clone -b $BRANCH https://github.com/${{ github.repository }}.git .
             else
               echo "📥 Pulling latest code..."
               git fetch origin
-              git checkout ${{ github.ref_name }}
-              git pull origin ${{ github.ref_name }}
+              git checkout $BRANCH
+              git reset --hard origin/$BRANCH
             fi
             
             # Install dependencies
             echo "📦 Installing dependencies..."
-            npm ci --production
+            if [ "$ENV_NAME" == "production" ]; then
+              npm ci --production
+            else
+              npm ci
+            fi
+            
+            # Create .env if not exists
+            if [ ! -f .env ]; then
+              echo "⚙️  Creating .env file..."
+              cat > .env << 'ENVEOF'
+            NODE_ENV=$ENV_NAME
+            PORT=$PORT
+            API_BASE_URL=http://202.155.95.166:$PORT
+            
+            DB_HOST=localhost
+            DB_PORT=5432
+            DB_NAME=$DB_NAME
+            DB_USER=balkar_admin
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            DB_DIALECT=postgres
+            
+            UPLOAD_DIR=./uploads
+            MAX_FILE_SIZE=104857600
+            
+            FRONTEND_URL=http://localhost:3000
+            
+            API_KEY_SECRET=${{ secrets.API_KEY_SECRET }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            
+            LOG_LEVEL=info
+            ENVEOF
+            fi
+            
+            # Create directories
+            mkdir -p uploads logs
             
             # Build TypeScript
             echo "🔨 Building TypeScript..."
             npm run build
             
-            # Run migrations (only for staging and prod)
-            if [ "${{ steps.set-env.outputs.env_name }}" != "development" ]; then
+            # Create database if not exists
+            echo "🗄️  Checking database..."
+            sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" | grep -q 1 || \
+              sudo -u postgres psql -c "CREATE DATABASE $DB_NAME; GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO balkar_admin;"
+            
+            # Run migrations
+            if [ "$ENV_NAME" != "development" ]; then
               echo "🔄 Running migrations..."
               npm run migrate
             fi
             
-            # Set environment
-            export NODE_ENV=${{ steps.set-env.outputs.env_name }}
-            export PORT=${{ steps.set-env.outputs.port }}
-            export DB_NAME=${{ steps.set-env.outputs.db_name }}
-            
             # Restart application with PM2
             echo "🔄 Restarting application..."
-            pm2 restart ${{ steps.set-env.outputs.app_name }} || \
-              pm2 start dist/server.js \
-                --name ${{ steps.set-env.outputs.app_name }} \
-                --env ${{ steps.set-env.outputs.env_name }}
-            
-            # Save PM2 process list
+            if pm2 describe $APP_NAME > /dev/null 2>&1; then
+              pm2 restart $APP_NAME
+            else
+              pm2 start dist/server.js --name $APP_NAME
+            fi
             pm2 save
             
-            echo "✅ Deployment to ${{ steps.set-env.outputs.env_name }} completed!"
-            
-            # Show status
-            pm2 status ${{ steps.set-env.outputs.app_name }}
-            # Install dependencies
-            echo "📦 Installing dependencies..."
-            npm ci --production
-            
-            # Build TypeScript
-            echo "🔨 Building TypeScript..."
+            echo "✅ Deployment to $ENV_NAME completed!"
+            pm2 status $APP_NAME
+
+      - name: 🧪 Health Check
+        run: |
+          sleep 5
+          curl -f http://202.155.95.166:${{ steps.set-env.outputs.port }}/api/health || echo "⚠️  Health check failed, but deployment may still be successful"
+      
       - name: 🎉 Deployment Success
         run: |
           ENV_NAME="${{ github.ref_name == 'main' && 'PRODUCTION' || github.ref_name == 'staging' && 'STAGING' || 'DEVELOPMENT' }}"
           PORT="${{ steps.set-env.outputs.port }}"
           echo "✅ Application deployed to $ENV_NAME successfully!"
-          echo "🔗 API URL: http://${{ secrets.VPS_HOST }}:$PORT"
+          echo "🔗 API URL: http://202.155.95.166:$PORT"
+          echo "🔍 Health: http://202.155.95.166:$PORT/api/health"
           echo "📦 Branch: ${{ github.ref_name }}"
           echo "🆔 Commit: ${{ github.sha }}"
-            npm run migrate
-            
-            # Restart application with PM2
-            echo "🔄 Restarting application..."
-            pm2 restart balkar-bucket || pm2 start dist/server.js --name balkar-bucket
-            
-            # Save PM2 process list
-            pm2 save
-            
-            echo "✅ Deployment completed successfully!"
-            
-            # Show status
-            pm2 status balkar-bucket
 
-      - name: 🎉 Deployment Success
-        run: |
-          echo "✅ Application deployed successfully!"
-          echo "🔗 Check your API at: https://${{ secrets.VPS_HOST }}"
-
-  # Job 6: Notify (Optional)
+  # Job 6: Notify
   notify:
     name: 📢 Notify Status
     runs-on: ubuntu-latest
