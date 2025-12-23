@@ -210,7 +210,7 @@ jobs:
             
             # Create .env file
             echo "⚙️  Creating .env file..."
-            cat > .env << ENVEOF
+            cat > .env << 'ENVEOF'
 NODE_ENV=$ENV_NAME
 PORT=$PORT
 API_BASE_URL=http://202.155.95.166:$PORT
@@ -232,6 +232,11 @@ JWT_SECRET=${{ secrets.JWT_SECRET }}
 
 LOG_LEVEL=info
 ENVEOF
+            
+            # Replace variables in .env file
+            sed -i "s/\$ENV_NAME/$ENV_NAME/g" .env
+            sed -i "s/\$PORT/$PORT/g" .env
+            sed -i "s/\$DB_NAME/$DB_NAME/g" .env
             
             # Create directories
             mkdir -p uploads logs
