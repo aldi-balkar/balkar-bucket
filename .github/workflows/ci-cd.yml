@@ -163,125 +163,25 @@ jobs:
 
       - name: 🚀 Deploy to VPS via SSH
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_PATH: ${{ steps.set-env.outputs.deploy_path }}
+          APP_NAME: ${{ steps.set-env.outputs.app_name }}
+          BRANCH: ${{ github.ref_name }}
+          PORT: ${{ steps.set-env.outputs.port }}
+          DB_NAME: ${{ steps.set-env.outputs.db_name }}
+          ENV_NAME: ${{ steps.set-env.outputs.env_name }}
+          GITHUB_REPO: ${{ github.repository }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          API_KEY_SECRET: ${{ secrets.API_KEY_SECRET }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         with:
           host: ${{ env.VPS_HOST }}
           username: ${{ env.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
+          envs: DEPLOY_PATH,APP_NAME,BRANCH,PORT,DB_NAME,ENV_NAME,GITHUB_REPO,DB_PASSWORD,API_KEY_SECRET,JWT_SECRET
           script: |
-            set -e
-            
-            echo "🚀 Starting deployment to ${{ steps.set-env.outputs.env_name }}..."
-            
-            # Variables
-            DEPLOY_PATH="${{ steps.set-env.outputs.deploy_path }}"
-            APP_NAME="${{ steps.set-env.outputs.app_name }}"
-            BRANCH="${{ github.ref_name }}"
-            PORT="${{ steps.set-env.outputs.port }}"
-            DB_NAME="${{ steps.set-env.outputs.db_name }}"
-            ENV_NAME="${{ steps.set-env.outputs.env_name }}"
-            
-            # Create backup for production
-            if [ "$ENV_NAME" == "production" ] && [ -d "$DEPLOY_PATH" ]; then
-              echo "💾 Creating backup..."
-              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-              cp -r $DEPLOY_PATH "${DEPLOY_PATH}_backup_${TIMESTAMP}"
-              ls -dt ${DEPLOY_PATH}_backup_* | tail -n +6 | xargs rm -rf 2>/dev/null || true
-            fi
-            
-            # Create directory if not exists
-            mkdir -p $DEPLOY_PATH
-            cd $DEPLOY_PATH
-            
-            # Clone or pull
-            if [ ! -d ".git" ]; then
-              echo "📥 Cloning repository..."
-              git clone -b $BRANCH https://github.com/${{ github.repository }}.git .
-            else
-              echo "📥 Pulling latest code..."
-              git fetch origin
-              git checkout $BRANCH
-              git reset --hard origin/$BRANCH
-            fi
-            
-            # Install dependencies
-            echo "📦 Installing dependencies..."
-            npm ci
-            
-            # Create .env file
-            echo "⚙️  Creating .env file..."
-            cat > .env << 'EOF'
-NODE_ENV=ENV_NAME_PLACEHOLDER
-PORT=PORT_PLACEHOLDER
-API_BASE_URL=http://202.155.95.166:PORT_PLACEHOLDER
-
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=DB_NAME_PLACEHOLDER
-DB_USER=balkar_admin
-DB_PASSWORD=DB_PASSWORD_PLACEHOLDER
-DB_DIALECT=postgres
-
-UPLOAD_DIR=./uploads
-MAX_FILE_SIZE=104857600
-
-FRONTEND_URL=http://localhost:3000
-
-API_KEY_SECRET=API_KEY_SECRET_PLACEHOLDER
-JWT_SECRET=JWT_SECRET_PLACEHOLDER
-
-LOG_LEVEL=info
-EOF
-            
-            sed -i "s/ENV_NAME_PLACEHOLDER/$ENV_NAME/g" .env
-            sed -i "s/PORT_PLACEHOLDER/$PORT/g" .env
-            sed -i "s/DB_NAME_PLACEHOLDER/$DB_NAME/g" .env
-            sed -i "s/DB_PASSWORD_PLACEHOLDER/${{ secrets.DB_PASSWORD }}/g" .env
-            sed -i "s/API_KEY_SECRET_PLACEHOLDER/${{ secrets.API_KEY_SECRET }}/g" .env
-            sed -i "s/JWT_SECRET_PLACEHOLDER/${{ secrets.JWT_SECRET }}/g" .env
-            
-            # Create directories
-            mkdir -p uploads logs
-            
-            # Build TypeScript
-            echo "🔨 Building TypeScript..."
-            npm run build
-            
-            # Create database if not exists
-            echo "🗄️  Checking database..."
-            if ! sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw $DB_NAME; then
-              echo "Creating database $DB_NAME..."
-              sudo -u postgres createdb $DB_NAME
-              sudo -u postgres psql -c "ALTER DATABASE $DB_NAME OWNER TO balkar_admin;"
-            else
-              echo "Database $DB_NAME already exists"
-            fi
-            
-            # Fix database permissions
-            echo "🔐 Setting database permissions..."
-            sudo -u postgres psql -d $DB_NAME -c "GRANT ALL ON SCHEMA public TO balkar_admin;"
-            sudo -u postgres psql -d $DB_NAME -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO balkar_admin;"
-            sudo -u postgres psql -d $DB_NAME -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO balkar_admin;"
-            sudo -u postgres psql -d $DB_NAME -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO balkar_admin;"
-            sudo -u postgres psql -d $DB_NAME -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO balkar_admin;"
-            
-            # Run migrations
-            if [ "$ENV_NAME" != "development" ]; then
-              echo "🔄 Running migrations..."
-              NODE_ENV=$ENV_NAME npm run migrate
-            fi
-            
-            # Restart application with PM2
-            echo "🔄 Restarting application..."
-            if pm2 describe $APP_NAME > /dev/null 2>&1; then
-              pm2 restart $APP_NAME
-            else
-              pm2 start dist/server.js --name $APP_NAME
-            fi
-            pm2 save
-            
-            echo "✅ Deployment to $ENV_NAME completed!"
-            pm2 status $APP_NAME
+            curl -sL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/deploy.sh | bash
 
       - name: 🧪 Health Check
         run: |
