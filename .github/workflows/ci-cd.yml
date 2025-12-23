@@ -250,10 +250,18 @@ ENVEOF
             if ! sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw $DB_NAME; then
               echo "Creating database $DB_NAME..."
               sudo -u postgres createdb $DB_NAME
-              sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO balkar_admin;"
+              sudo -u postgres psql -c "ALTER DATABASE $DB_NAME OWNER TO balkar_admin;"
             else
               echo "Database $DB_NAME already exists"
             fi
+            
+            # Fix database permissions
+            echo "🔐 Setting database permissions..."
+            sudo -u postgres psql -d $DB_NAME -c "GRANT ALL ON SCHEMA public TO balkar_admin;"
+            sudo -u postgres psql -d $DB_NAME -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO balkar_admin;"
+            sudo -u postgres psql -d $DB_NAME -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO balkar_admin;"
+            sudo -u postgres psql -d $DB_NAME -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO balkar_admin;"
+            sudo -u postgres psql -d $DB_NAME -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO balkar_admin;"
             
             # Run migrations
             if [ "$ENV_NAME" != "development" ]; then
