@@ -84,6 +84,9 @@ sudo -u postgres psql -d $DB_NAME -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public 
 if [ "$ENV_NAME" != "development" ]; then
   echo "🔄 Running migrations..."
   NODE_ENV=$ENV_NAME npm run migrate
+  
+  echo "🌱 Running seeders..."
+  NODE_ENV=$ENV_NAME npm run seed
 fi
 
 # Restart application with PM2
