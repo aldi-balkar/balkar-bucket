@@ -203,7 +203,7 @@ jobs:
     name: 📢 Notify Status
     runs-on: ubuntu-latest
     needs: [deploy]
-    if: always()
+    if: false
     
     steps:
       - name: 📢 Send notification
