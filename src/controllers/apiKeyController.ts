@@ -26,14 +26,45 @@ export const getAllApiKeys = async (req: AuthRequest, res: Response): Promise<vo
       order: [['createdAt', 'DESC']],
     });
 
+    // Format data for frontend
+    const formattedData = apiKeys.map((apiKey: any) => ({
+      id: apiKey.id,
+      name: apiKey.name,
+      key: `${apiKey.key.substring(0, 15)}...${apiKey.key.substring(apiKey.key.length - 4)}`, // Masked key
+      app: apiKey.name, // Using name as app
+      status: apiKey.status.charAt(0).toUpperCase() + apiKey.status.slice(1), // Capitalize
+      permissions: apiKey.permissions,
+      rateLimit: apiKey.rateLimitEnabled 
+        ? `${apiKey.rateLimitMax} req/min` 
+        : 'Unlimited',
+      usage: {
+        requests: Number(apiKey.totalRequests),
+        uploads: Number(apiKey.totalUploads),
+        storage: formatBytes(Number(apiKey.storageUsed)),
+        errors: apiKey.errorCount,
+      },
+      createdAt: apiKey.createdAt,
+      lastUsed: apiKey.lastUsedAt,
+      expiresAt: apiKey.expiresAt,
+    }));
+
     res.json({
-      data: apiKeys,
+      data: formattedData,
       pagination: getPaginationData(count, page, limit),
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 };
+
+// Helper function to format bytes
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
 
 export const getApiKeyById = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -56,6 +87,7 @@ export const createApiKey = async (req: AuthRequest, res: Response): Promise<voi
   try {
     const {
       name,
+      app,
       permissions,
       rateLimitEnabled,
       rateLimitMax,
@@ -66,7 +98,7 @@ export const createApiKey = async (req: AuthRequest, res: Response): Promise<voi
     const key = generateApiKey();
 
     const apiKey = await ApiKey.create({
-      name,
+      name: name || app || 'Unnamed API Key',
       key,
       permissions: permissions || ['read'],
       status: 'active',
@@ -92,7 +124,7 @@ export const createApiKey = async (req: AuthRequest, res: Response): Promise<voi
     res.status(201).json({
       id: apiKey.id,
       name: apiKey.name,
-      key: apiKey.key,
+      key: apiKey.key, // Full key on creation only
       message: 'API key created successfully. Please save the key, it will not be shown again.',
     });
   } catch (error: any) {

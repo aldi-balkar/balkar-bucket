@@ -21,6 +21,9 @@ Bucket.hasMany(File, { foreignKey: 'bucketId', as: 'files' });
 File.belongsTo(ApiKey, { foreignKey: 'apiKeyId', as: 'apiKey' });
 ApiKey.hasMany(File, { foreignKey: 'apiKeyId', as: 'files' });
 
+File.belongsTo(User, { foreignKey: 'uploadedBy', as: 'uploader' });
+User.hasMany(File, { foreignKey: 'uploadedBy', as: 'uploadedFiles' });
+
 Log.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 Log.belongsTo(ApiKey, { foreignKey: 'apiKeyId', as: 'apiKey' });
 

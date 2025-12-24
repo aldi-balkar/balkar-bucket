@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import authRouter from './auth';
 import bucketsRouter from './buckets';
 import filesRouter from './files';
 import apiKeysRouter from './apiKeys';
@@ -21,6 +22,7 @@ router.get('/health', (_req, res) => {
 });
 
 // API Routes
+router.use('/auth', authRouter);
 router.use('/buckets', bucketsRouter);
 router.use('/files', filesRouter);
 router.use('/api-keys', apiKeysRouter);

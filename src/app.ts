@@ -15,7 +15,7 @@ const app: Application = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: config.FRONTEND_URL,
+    origin: ['http://localhost:3001', 'http://localhost:3000', config.FRONTEND_URL],
     credentials: true,
   })
 );

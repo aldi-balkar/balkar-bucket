@@ -3,29 +3,61 @@ import { Bucket, File, ApiKey, Log } from '../models';
 import { AuthRequest } from '../middleware/auth';
 import { Op } from 'sequelize';
 import sequelize from '../config/sequelize';
+import logger from '../config/logger';
 
 export const getDashboardStats = async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
     // Storage stats
-    const totalStorage = BigInt(107374182400); // 100GB default
+    const totalStorage = 107374182400; // 100GB default
     const usedStorageResult = await Bucket.findOne({
       attributes: [[sequelize.fn('SUM', sequelize.col('used_space')), 'total']],
       raw: true,
     });
     const usedStorage = Number((usedStorageResult as any)?.total || 0);
-    const storagePercentage = Math.round((usedStorage / Number(totalStorage)) * 100);
+    const availableStorage = totalStorage - usedStorage;
+    const storagePercentage = Math.round((usedStorage / totalStorage) * 100);
 
-    // Files stats
+    // Files stats by type
     const totalFiles = await File.count({ where: { isDeleted: false } });
     const filesInTrash = await File.count({ where: { isDeleted: true } });
+
+    const imageFiles = await File.count({
+      where: {
+        isDeleted: false,
+        mimeType: { [Op.like]: 'image/%' },
+      },
+    });
+
+    const documentFiles = await File.count({
+      where: {
+        isDeleted: false,
+        mimeType: {
+          [Op.or]: [
+            { [Op.like]: 'application/pdf' },
+            { [Op.like]: 'application/msword%' },
+            { [Op.like]: 'application/vnd.openxmlformats%' },
+          ],
+        },
+      },
+    });
+
+    const videoFiles = await File.count({
+      where: {
+        isDeleted: false,
+        mimeType: { [Op.like]: 'video/%' },
+      },
+    });
+
+    const otherFiles = totalFiles - imageFiles - documentFiles - videoFiles;
 
     // Buckets stats
     const totalBuckets = await Bucket.count();
     const publicBuckets = await Bucket.count({ where: { isPublic: true } });
-    const privateBuckets = await Bucket.count({ where: { isPublic: false } });
+    const privateBuckets = totalBuckets - publicBuckets;
 
     // API Keys stats
     const activeApiKeys = await ApiKey.count({ where: { status: 'active' } });
+    const revokedApiKeys = await ApiKey.count({ where: { status: 'revoked' } });
     const totalApiKeys = await ApiKey.count();
 
     // Upload trend (last 7 days)
@@ -35,6 +67,7 @@ export const getDashboardStats = async (_req: AuthRequest, res: Response): Promi
     const uploadTrend = await Log.findAll({
       where: {
         type: 'upload',
+        status: 'success',
         createdAt: { [Op.gte]: sevenDaysAgo },
       },
       attributes: [
@@ -46,49 +79,65 @@ export const getDashboardStats = async (_req: AuthRequest, res: Response): Promi
       raw: true,
     });
 
-    // Recent uploads (last 10)
-    const recentUploads = await File.findAll({
+    // Recent uploads (last 5)
+    const recentUploadsData = await File.findAll({
       where: { isDeleted: false },
-      limit: 10,
+      limit: 5,
       order: [['createdAt', 'DESC']],
-      attributes: ['id', 'originalName', 'size', 'mimeType', 'createdAt'],
+      attributes: ['id', 'originalName', 'filename', 'size', 'mimeType', 'createdAt', 'uploadedBy'],
     });
 
-    // Recent errors (last 10)
-    const recentErrors = await Log.findAll({
-      where: { status: 'failed' },
-      limit: 10,
-      order: [['createdAt', 'DESC']],
-      attributes: ['id', 'action', 'details', 'createdAt'],
-    });
+    const recentUploads = recentUploadsData.map((file: any) => ({
+      id: file.id,
+      filename: file.originalName,
+      size: file.size,
+      user: file.uploadedBy || 'Unknown',
+      timestamp: file.createdAt,
+    }));
 
     // Top buckets by storage
-    const topBuckets = await Bucket.findAll({
+    const topBucketsData = await Bucket.findAll({
       limit: 5,
       order: [['usedSpace', 'DESC']],
       attributes: ['id', 'name', 'usedSpace', 'fileCount'],
     });
 
+    const topBuckets = topBucketsData.map((bucket: any) => ({
+      id: bucket.id,
+      name: bucket.name,
+      storage: bucket.usedSpace,
+      files: bucket.fileCount,
+    }));
+
     // Top API keys by usage
-    const topApps = await ApiKey.findAll({
+    const topAppsData = await ApiKey.findAll({
+      where: { status: 'active' },
       limit: 5,
       order: [['totalRequests', 'DESC']],
       attributes: ['id', 'name', 'totalRequests', 'totalUploads', 'storageUsed'],
     });
 
-    // Security stats
-    const unlimitedApiKeys = await ApiKey.count({
-      where: { rateLimitEnabled: false },
-    });
+    const topApps = topAppsData.map((apiKey: any) => ({
+      id: apiKey.id,
+      name: apiKey.name,
+      requests: Number(apiKey.totalRequests),
+      uploads: Number(apiKey.totalUploads),
+      storage: Number(apiKey.storageUsed),
+    }));
 
     res.json({
       storage: {
         total: totalStorage,
         used: usedStorage,
+        available: availableStorage,
         percentage: storagePercentage,
       },
       files: {
         total: totalFiles,
+        images: imageFiles,
+        documents: documentFiles,
+        videos: videoFiles,
+        others: otherFiles,
         inTrash: filesInTrash,
       },
       buckets: {
@@ -98,24 +147,23 @@ export const getDashboardStats = async (_req: AuthRequest, res: Response): Promi
       },
       apiKeys: {
         active: activeApiKeys,
+        revoked: revokedApiKeys,
         total: totalApiKeys,
       },
-      uploadTrend,
+      uploadTrend: uploadTrend.map((item: any) => ({
+        date: item.date,
+        files: parseInt(item.files),
+        size: 0, // Can be calculated if needed
+      })),
       recentUploads,
-      recentErrors,
       topBuckets,
       topApps,
-      security: {
-        publicBuckets,
-        expiredSignedUrls: 0, // Placeholder
-        unlimitedApiKeys,
-        fileScans: {
-          clean: totalFiles,
-          infected: 0,
-        },
-      },
     });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    logger.error('Dashboard stats error:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to fetch dashboard statistics',
+    });
   }
 };
